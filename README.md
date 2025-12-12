@@ -15,24 +15,26 @@ LangChain + OpenAI + Qdrant + Redis blueprint for internal RAG that scales **wit
 
 ### Stack at a Glance
 
-| Subsystem                  | Responsibility                                | Stack                           |
-| -------------------------- | --------------------------------------------- | ------------------------------- |
-| `backend/`                 | API, ingestion, retrieval, caching, streaming | Python (FastAPI) + LangChain    |
-| `frontend/web/`            | Operator UI                                   | Vite + React + Tailwind         |
-| `frontend/bff/` (optional) | Proxy, sessions, streaming downloads          | Node + Express                  |
-| `infra/`                   | Local Qdrant + Redis                          | Docker Compose                  |
-| `scripts/`                 | Dev automation                                | PowerShell + Python             |
+| Subsystem                  | Responsibility                                | Stack                        |
+| -------------------------- | --------------------------------------------- | ---------------------------- |
+| `backend/`                 | API, ingestion, retrieval, caching, streaming | Python (FastAPI) + LangChain |
+| `frontend/web/`            | Operator UI                                   | Vite + React + Tailwind      |
+| `frontend/bff/` (optional) | Proxy, sessions, streaming downloads          | Node + Express               |
+| `infra/`                   | Local Qdrant + Redis                          | Docker Compose               |
+| `scripts/`                 | Dev automation                                | PowerShell + Python          |
 
 ---
 
 ## Goals & Non-goals
 
 **Goals**
+
 - High-quality internal helpdesk answers with citations.
 - Operate efficiently: local query rewrites, compressed context packs, reuse via caching.
 - Smooth operator tooling: file hints, downloads, onboarding flows.
 
 **Non-goals (initially)**
+
 - Public multi-tenant SaaS footprint.
 - Fine-tuning foundation models.
 - Full RBAC matrix (pushed to Phase 2).
@@ -66,6 +68,7 @@ React UI (frontend/web)  ->  /api/*  ->  (optional) Express BFF  ---------+
 ### Core Flow
 
 **Ingestion**
+
 1. File arrives via drop into `NOTES_DIR` + `POST /refresh`, or via `POST /upload`.
 2. Loader extracts text (PDF/DOCX/XLSX/CSV/MD/TXT, OCR optional).
 3. Text normalizes and chunks (size/overlap configurable).
@@ -74,6 +77,7 @@ React UI (frontend/web)  ->  /api/*  ->  (optional) Express BFF  ---------+
 6. Redis invalidates file lists, retrieval sets, and cached answers.
 
 **Ask**
+
 1. Normalize the query (case, tokens, heuristics).
 2. Clarify/expand locally (rules, classifier, or short rewrite call).
 3. Retrieve top-K chunks from Qdrant.
@@ -86,30 +90,30 @@ React UI (frontend/web)  ->  /api/*  ->  (optional) Express BFF  ---------+
 
 ## Redis Responsibilities
 
-| Bucket              | Purpose                                                   | Suggested TTL |
-| ------------------- | --------------------------------------------------------- | ------------- |
-| Rewrite cache       | Normalized query → clarified intent + rewritten query     | 1–7 days      |
-| Retrieval cache     | Rewritten query → chunk IDs + scores                      | 1–24 hours    |
-| Compression cache   | Query + chunk IDs → compressed context pack               | 15 min–6 hrs  |
-| Semantic answer     | Query embedding hash → answer + citations                 | 5 min–24 hrs  |
-| File list cache     | Cached file metadata listings                             | 30–120 sec    |
-| Rate/in-flight data | Token budgets, dedupe locks, session metadata             | Policy based  |
+| Bucket              | Purpose                                               | Suggested TTL |
+| ------------------- | ----------------------------------------------------- | ------------- |
+| Rewrite cache       | Normalized query → clarified intent + rewritten query | 1–7 days      |
+| Retrieval cache     | Rewritten query → chunk IDs + scores                  | 1–24 hours    |
+| Compression cache   | Query + chunk IDs → compressed context pack           | 15 min–6 hrs  |
+| Semantic answer     | Query embedding hash → answer + citations             | 5 min–24 hrs  |
+| File list cache     | Cached file metadata listings                         | 30–120 sec    |
+| Rate/in-flight data | Token budgets, dedupe locks, session metadata         | Policy based  |
 
 ---
 
 ## API Surface (planned)
 
-| Route           | Method | Purpose                                                   | Notes                      |
-| --------------- | ------ | --------------------------------------------------------- | -------------------------- |
-| `/health`       | GET    | Basic health plus Qdrant/Redis status                     |                            |
-| `/files`        | GET    | List known docs from local index + Qdrant metadata        |                            |
-| `/files/search` | GET    | Fuzzy filename search for UI hints                        |                            |
-| `/source`       | GET    | Stream original file bytes from `NOTES_DIR`               | Auth recommended           |
-| `/source_text`  | GET    | Return normalized extracted text                          |                            |
-| `/refresh`      | POST   | Rescan `NOTES_DIR` and upsert into Qdrant                 | Webhook or manual trigger  |
-| `/upload`       | POST   | Upload + ingest file(s)                                   | Multipart                  |
-| `/ask`          | POST   | Main RAG endpoint (`mode=answer` or `mode=verbatim`)      | JSON body                  |
-| `/ask_stream`   | POST   | NDJSON/SSE stream of the answer                           | UI typing indicators       |
+| Route           | Method | Purpose                                              | Notes                     |
+| --------------- | ------ | ---------------------------------------------------- | ------------------------- |
+| `/health`       | GET    | Basic health plus Qdrant/Redis status                |                           |
+| `/files`        | GET    | List known docs from local index + Qdrant metadata   |                           |
+| `/files/search` | GET    | Fuzzy filename search for UI hints                   |                           |
+| `/source`       | GET    | Stream original file bytes from `NOTES_DIR`          | Auth recommended          |
+| `/source_text`  | GET    | Return normalized extracted text                     |                           |
+| `/refresh`      | POST   | Rescan `NOTES_DIR` and upsert into Qdrant            | Webhook or manual trigger |
+| `/upload`       | POST   | Upload + ingest file(s)                              | Multipart                 |
+| `/ask`          | POST   | Main RAG endpoint (`mode=answer` or `mode=verbatim`) | JSON body                 |
+| `/ask_stream`   | POST   | NDJSON/SSE stream of the answer                      | UI typing indicators      |
 
 Optional BFF proxies these as `/api/*` and handles download streaming/session auth.
 
@@ -219,7 +223,7 @@ SESSION_SECRET=change-me
 
 ## Local Development
 
-1. **Start infra** (Qdrant + Redis)  
+1. **Start infra** (Qdrant + Redis)
    ```bash
    cd infra
    docker compose up -d
@@ -245,50 +249,65 @@ SESSION_SECRET=change-me
 
 ## LangChain Implementation Notes
 
-- Use file-type aware loaders; ensure parity between ingestion + refresh.  
-- Prefer token-aware splitter so chunk size stays stable across formats.  
-- Embeddings: OpenAI embeddings; swap for Azure/Open-source if policy requires.  
-- Retrieval: QdrantVectorStore with optional metadata filters (department/system/file tags).  
-- Compression: convert retrieved chunks into bullet facts + step blocks + constraints; retain citations `{doc_id, filename, chunk_id, offsets/page}`.  
-- Generation: enforce “If the info is not present in sources, say so.”; return `{answer, sources[], quotes[]}` payload.  
+- Use file-type aware loaders; ensure parity between ingestion + refresh.
+- Prefer token-aware splitter so chunk size stays stable across formats.
+- Embeddings: OpenAI embeddings; swap for Azure/Open-source if policy requires.
+- Retrieval: QdrantVectorStore with optional metadata filters (department/system/file tags).
+- Compression: convert retrieved chunks into bullet facts + step blocks + constraints; retain citations `{doc_id, filename, chunk_id, offsets/page}`.
+- Generation: enforce “If the info is not present in sources, say so.”; return `{answer, sources[], quotes[]}` payload.
 
 ---
 
 ## Cost & Token Controls
 
-- Minimize input tokens via local rewrite + compression before hitting GPT.  
-- Cache rewrite, retrieval, compression, and semantic answers (Redis) to prevent duplicate spend.  
-- Use in-flight dedupe locks so burst traffic does not trigger repeated OpenAI calls.  
-- Enforce rate limits per user/department, plus max context/output tokens.  
-- Provide verbatim snippets fallback for SOP-style questions to keep responses short.  
+- Minimize input tokens via local rewrite + compression before hitting GPT.
+- Cache rewrite, retrieval, compression, and semantic answers (Redis) to prevent duplicate spend.
+- Use in-flight dedupe locks so burst traffic does not trigger repeated OpenAI calls.
+- Enforce rate limits per user/department, plus max context/output tokens.
+- Provide verbatim snippets fallback for SOP-style questions to keep responses short.
 
 ---
 
 ## Security Posture
 
-- Phase 1: private network only, VPN/firewall required.  
-- Before Phase 2: add auth (SSO/OIDC), per-department access controls, audit logging, and PHI/PII policy.  
-- Confirm org policy for OpenAI usage; insert redaction layer if files may contain PHI/PII.  
+- Phase 1: private network only, VPN/firewall required.
+- Before Phase 2: add auth (SSO/OIDC), per-department access controls, audit logging, and PHI/PII policy.
+- Confirm org policy for OpenAI usage; insert redaction layer if files may contain PHI/PII.
 
 ---
 
 ## Testing & Validation
 
-- **Unit tests**: chunking determinism, cache key + TTL correctness, loader extraction quality.  
-- **Integration tests**: Qdrant upsert/retrieval, Redis cache hit/miss, `/upload → /ask → /source` happy path.  
-- **Golden set**: canonical queries must surface known sources; verbatim requests must return exact steps.  
+- **Unit tests**: chunking determinism, cache key + TTL correctness, loader extraction quality.
+- **Integration tests**: Qdrant upsert/retrieval, Redis cache hit/miss, `/upload → /ask → /source` happy path.
+- **Golden set**: canonical queries must surface known sources; verbatim requests must return exact steps.
 
 ---
 
 ## Roadmap
 
-**Phase 1 (MVP)**  
-- Ingest → Qdrant, ask → retrieve → compress → generate.  
-- Redis caching (rewrite, retrieval, answers).  
-- Basic UI with file hints and downloads.  
+**Phase 1 (MVP)**
 
-**Phase 2 (Production hardening)**  
-- Auth + roles, per-department access.  
-- Observability (metrics, tracing).  
-- Strong PHI/PII handling + audit logging.  
-- Multi-instance deployment across environments.  
+- Qdrant-based RAG pipeline.
+- LangChain chains for ingestion, retrieval, compression, and generation.
+- Redis caching (rewrite, retrieval, answer).
+- React operator UI with:
+  - onboarding,
+  - suggestion buttons,
+  - file hints and downloads,
+  - answer + citations.
+
+**Phase 2 (Advanced Features)**
+
+- Agent tools (ticket creation, notifications, internal APIs).
+- Slack/Teams integration.
+- Simple analytics dashboard (usage, latency, “no answer” rate).
+- A/B tests for prompts and model settings.
+- Optional fine-tuning or specialized small models for classification/routing.
+
+**Phase 3 (Enterprise Hardening)**
+
+- SSO/OIDC integration
+- Per-department collections and policies
+- Full observability (metrics, tracing, alerting).
+- Governance documentation and risk assessments.
