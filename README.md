@@ -32,6 +32,8 @@ LangChain + OpenAI + Qdrant + Redis blueprint for internal RAG that scales **wit
 - High-quality internal helpdesk answers with citations.
 - Operate efficiently: local query rewrites, compressed context packs, reuse via caching.
 - Smooth operator tooling: file hints, downloads, onboarding flows.
+- Production-grade RAG pipeline: vector DB with rich metadata, ingestion/resync parity, and auditable lineage.
+- Keep the architecture clean so Slack/Teams/CRM/ticketing hooks can drop in without major refactors.
 
 **Non-goals (initially)**
 
@@ -70,7 +72,7 @@ React UI (frontend/web)  ->  /api/*  ->  (optional) Express BFF  ---------+
 **Ingestion**
 
 1. File arrives via drop into `NOTES_DIR` + `POST /refresh`, or via `POST /upload`.
-2. Loader extracts text (PDF/DOCX/XLSX/CSV/MD/TXT, OCR optional).
+2. Loader extracts text (PDF/DOCX/XLSX/CSV/MD/TXT/LOG, OCR optional).
 3. Text normalizes and chunks (size/overlap configurable).
 4. OpenAI embeddings are generated.
 5. Chunks upsert into Qdrant with metadata linking back to the file.
@@ -79,12 +81,29 @@ React UI (frontend/web)  ->  /api/*  ->  (optional) Express BFF  ---------+
 **Ask**
 
 1. Normalize the query (case, tokens, heuristics).
-2. Clarify/expand locally (rules, classifier, or short rewrite call).
-3. Retrieve top-K chunks from Qdrant.
-4. Compress context into “facts / steps / constraints” while keeping citations.
-5. Generate the answer via OpenAI chat.
-6. Return answer + citations + quoted snippets.
-7. Cache retrieval + answer artifacts in Redis.
+2. Clarify/expand locally (rules, classifier, or a short LLM rewrite chain) to normalize abbreviations, tag entities, and detect intent.
+3. Retrieve top-K chunks from Qdrant with metadata filters (department/system/tag) when available.
+4. Compress context into “facts / steps / constraints” while keeping citations and chunk IDs.
+5. Generate the answer via OpenAI chat, honoring `mode=answer` vs `mode=verbatim`.
+6. Return answer + citations + quoted snippets plus latency/token metadata.
+7. Cache rewrite/retrieval/context/answer artifacts in Redis (subject to TTL + invalidation rules).
+
+Example response:
+
+```json
+{
+  "answer": "...",
+  "mode": "answer",
+  "sources": ["telecom-voicemail-policy.pdf#p12_c4"],
+  "quotes": ["\"Dial *86 ...\""],
+  "metadata": {
+    "model": "gpt-4.1-mini",
+    "latency_ms": 1200,
+    "tokens_input": 1800,
+    "tokens_output": 400
+  }
+}
+```
 
 ---
 
@@ -98,6 +117,8 @@ React UI (frontend/web)  ->  /api/*  ->  (optional) Express BFF  ---------+
 | Semantic answer     | Query embedding hash → answer + citations             | 5 min–24 hrs  |
 | File list cache     | Cached file metadata listings                         | 30–120 sec    |
 | Rate/in-flight data | Token budgets, dedupe locks, session metadata         | Policy based  |
+
+Key patterns (illustrative): `rewrite:{hash(query_norm)}`, `retrieve:{hash(rewritten_query)}:{k}`, `compress:{hash(rewritten_query)}:{hash(chunk_ids)}`, and `answer:{hash(rewritten_query)}:{model}:{mode}`. Locks such as `inflight:{hash(rewritten_query)}` keep 20 identical questions from triggering 20 OpenAI calls while caches expire based on document churn.
 
 ---
 
@@ -130,6 +151,9 @@ helpdesk-rag/
         routes_ask.py
         routes_files.py
         routes_ingest.py
+        routes_health.py
+        routes_source.py
+        routes_source_text.py
       rag/
         pipeline.py            # LangChain runnable graph
         retriever.py           # Qdrant + metadata filters
@@ -206,7 +230,8 @@ VERBATIM_DEFAULT=0
 
 [OCR]
 OCR_ENABLED=1
-TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe
+TESSERACT_CMD=/usr/bin/tesseract        # Linux
+# or C:\Program Files\Tesseract-OCR\tesseract.exe on Windows
 
 Frontend (frontend/web/.env)
 VITE_API_BASE=/api          # or http://localhost:8000 when hitting backend directly
@@ -240,7 +265,13 @@ SESSION_SECRET=change-me
    npm install
    npm run dev
    ```
-4. **Smoke test**
+4. **Optional BFF**
+   ```bash
+   cd frontend/bff
+   npm install
+   npm run dev
+   ```
+5. **Smoke test**
    - `GET http://localhost:8000/health`
    - Upload: `POST /upload`
    - Ask: `POST /ask {"query": "How do I reset voicemail?", "mode": "answer"}`
@@ -250,6 +281,7 @@ SESSION_SECRET=change-me
 ## LangChain Implementation Notes
 
 - Use file-type aware loaders; ensure parity between ingestion + refresh.
+- Normalize extracted text (line endings/whitespace) before chunking so hashes stay stable.
 - Prefer token-aware splitter so chunk size stays stable across formats.
 - Embeddings: OpenAI embeddings; swap for Azure/Open-source if policy requires.
 - Retrieval: QdrantVectorStore with optional metadata filters (department/system/file tags).
@@ -281,6 +313,19 @@ SESSION_SECRET=change-me
 - **Unit tests**: chunking determinism, cache key + TTL correctness, loader extraction quality.
 - **Integration tests**: Qdrant upsert/retrieval, Redis cache hit/miss, `/upload → /ask → /source` happy path.
 - **Golden set**: canonical queries must surface known sources; verbatim requests must return exact steps.
+
+  ```json
+  [
+    {
+      "query": "How do I reset my voicemail PIN?",
+      "expected_sources": ["telecom-voicemail-policy.pdf"],
+      "mode": "answer",
+      "must_have_verbatim": true
+    }
+  ]
+  ```
+
+Use the golden set to compare prompt/routing adjustments, validate new versions before deploy, and flag regressions in latency or accuracy.
 
 ---
 
