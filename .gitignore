@@ -1,0 +1,5 @@
+# Ignore Cursor workspace metadata
+.cursor/
+
+# Local instructions docs (tracked elsewhere)
+Instructions/

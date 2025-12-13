@@ -246,12 +246,54 @@ SESSION_SECRET=change-me
 
 ---
 
+## Local Infra Bootstrap (WS-102)
+
+**Prerequisites**
+
+- Docker Desktop (macOS/Windows) or Docker Engine plus the Compose plugin (Linux)
+- `curl` for HTTP checks (preinstalled on macOS/Linux/Windows 10+)
+- `redis-cli` (install via `brew install redis`, `apt install redis-tools`, `choco install redis-64`, or run `docker exec -it compass_redis redis-cli`)
+- No hosted accounts are needed; Qdrant and Redis both run as local Docker containers.
+
+Qdrant exposes REST on `http://localhost:6333` and gRPC on `6334`. Redis listens on `redis://localhost:6379`.
+
+### Start, stop, and verify
+
+```bash
+./scripts/start-data-plane.sh        # or: pwsh scripts/start-data-plane.ps1
+./scripts/check-data-plane.sh        # curl + redis-cli probes
+./scripts/stop-data-plane.sh         # or: pwsh scripts/stop-data-plane.ps1
+```
+
+Raw Compose commands for reference:
+
+```bash
+docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml down
+```
+
+Manual health checks (also run by `check-data-plane`):
+
+```bash
+curl http://localhost:6333/healthz
+redis-cli -p 6379 ping
+```
+
+### Troubleshooting
+
+- **Port already allocated (`6333` or `6379`)**: stop the conflicting process (`docker ps`, `lsof -i :6333`) or edit the host-side ports in `infra/docker-compose.yml`.
+- **Stale/corrupt volumes**: remove them via `docker volume rm worksteamcompassai_qdrant_storage worksteamcompassai_redis_storage` (check actual names with `docker volume ls`) and rerun the start script.
+- **Compose errors**: upgrade Docker Desktop/Engine so `docker compose` understands file format `3.8`.
+- **Missing `redis-cli`**: install it locally or exec into the container with `docker exec -it compass_redis redis-cli ping`.
+
+---
+
 ## Local Development
 
 1. **Start infra** (Qdrant + Redis)
    ```bash
-   cd infra
-   docker compose up -d
+   ./scripts/start-data-plane.sh
+   # or: pwsh scripts/start-data-plane.ps1
    ```
 2. **Backend**
    ```bash
