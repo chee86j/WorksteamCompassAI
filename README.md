@@ -288,6 +288,16 @@ redis-cli -p 6379 ping
 
 ---
 
+## Backend Skeleton (WS-103)
+
+- FastAPI app lives under `backend/app/main.py` with routers split into `ask`, `files`, `health`, and `ingest`.
+- Configuration uses `backend/app/core/settings.py` (`pydantic.BaseSettings`), so fill `backend/.env` or rely on defaults shown above.
+- Logging is pre-wired; run the API locally via `uvicorn backend.app.main:app --reload --port 8000`.
+- Available routes today (stub implementations): `GET /health`, `POST /ask`, `POST /ask_stream`, `GET /files`, `POST /refresh`, and `POST /upload`.
+- Utility helpers (`backend/app/utils/normalize.py`, `backend/app/utils/hashing.py`) centralize query normalization and manifest hashing for upcoming ingestion work.
+
+---
+
 ## Local Development
 
 1. **Start infra** (Qdrant + Redis)
