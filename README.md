@@ -1,8 +1,8 @@
 # WorkStream Compass AI
 
-LangChain + OpenAI + Qdrant + Redis blueprint for internal RAG that scales **without runaway token costs**. The goal is a pragmatic monorepo pattern you can clone, trim, or extend for your own helpdesk or SOP assistant.
+LangChain + OpenAI + Qdrant + Redis blueprint for departmental or personal work assistants that scale **without runaway token costs**. The goal is a pragmatic monorepo pattern you can clone, trim, or extend for your own team knowledge assistant or SOP companion—whether you deploy it internally or call hosted OpenAI models directly.
 
-> Security note: assume an internal, trusted network. Lock down ingest/answer endpoints before moving outside the firewall or adding multi-tenant users.
+> Security note: even if you expose this beyond an internal, trusted network, make sure ingest/answer endpoints are locked down before inviting multi-tenant users.
 
 ---
 
@@ -29,7 +29,7 @@ LangChain + OpenAI + Qdrant + Redis blueprint for internal RAG that scales **wit
 
 **Goals**
 
-- High-quality internal helpdesk answers with citations.
+- High-quality departmental/personal assistant answers with citations.
 - Operate efficiently: local query rewrites, compressed context packs, reuse via caching.
 - Smooth operator tooling: file hints, downloads, onboarding flows.
 - Production-grade RAG pipeline: vector DB with rich metadata, ingestion/resync parity, and auditable lineage.
@@ -143,7 +143,7 @@ Optional BFF proxies these as `/api/*` and handles download streaming/session au
 ## Repo Structure (suggested)
 
 ```
-helpdesk-rag/
+workspace-assistant/
   backend/
     app/
       main.py
@@ -206,7 +206,7 @@ OPENAI_TIMEOUT_SEC=60
 [Qdrant]
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=
-QDRANT_COLLECTION=helpdesk_chunks
+QDRANT_COLLECTION=workspace_chunks
 
 [Redis]
 REDIS_URL=redis://localhost:6379/0

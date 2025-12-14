@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     qdrant_url: str = Field(default='http://localhost:6333')
     qdrant_api_key: str | None = Field(default=None)
-    qdrant_collection: str = Field(default='helpdesk_chunks')
+    qdrant_collection: str = Field(default='workspace_chunks')
 
     redis_url: str = Field(default='redis://localhost:6379/0')
 
