@@ -3,3 +3,20 @@
 
 # Local instructions docs (tracked elsewhere)
 Instructions/
+
+# Python + env
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Local secrets
+backend/.env
+
+# Data dir for ingestion
+notes/
+
+# OS noise
+.DS_Store
+Thumbs.db

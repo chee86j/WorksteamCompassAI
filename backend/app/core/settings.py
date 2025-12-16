@@ -11,7 +11,11 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = Field(default=None, env='OPENAI_API_KEY')
     openai_chat_model: str = Field(default='gpt-4.1-mini')
+    openai_chat_temperature: float = Field(default=0.2)
+    openai_chat_max_tokens: int = Field(default=600)
+    openai_timeout_sec: int = Field(default=60)
     openai_embed_model: str = Field(default='text-embedding-3-large')
+    openai_embed_dimension: int = Field(default=3072)
 
     qdrant_url: str = Field(default='http://localhost:6333')
     qdrant_api_key: str | None = Field(default=None)
@@ -24,6 +28,10 @@ class Settings(BaseSettings):
 
     chunk_size: int = Field(default=700)
     chunk_overlap: int = Field(default=80)
+
+    rag_top_k: int = Field(default=10)
+    max_context_tokens: int = Field(default=2500)
+    verbatim_default: int = Field(default=0)
 
     cache_rewrite_ttl_sec: int = Field(default=86400)
     cache_retrieval_ttl_sec: int = Field(default=3600)

@@ -1,3 +1,20 @@
 # Keep Docker builds lean
 .cursor/
 Instructions/
+
+# Local venvs
+.venv/
+venv/
+env/
+
+# Compiled artifacts
+__pycache__/
+*.pyc
+
+# Runtime data / secrets
+backend/.env
+notes/
+
+# OS noise
+.DS_Store
+Thumbs.db

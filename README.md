@@ -298,18 +298,85 @@ redis-cli -p 6379 ping
 
 ---
 
-## Local Development
+## Environment Setup (WS-104)
 
-1. **Start infra** (Qdrant + Redis)
+1. **Create backend/.env**
+
+   The backend uses `pydantic.BaseSettings`, so add the required environment variables to `backend/.env`:
+
+   ```bash
+   cat > backend/.env <<'EOF'
+   OPENAI_API_KEY=sk-your-key-here
+
+   # Optional overrides (defaults shown)
+   OPENAI_CHAT_MODEL=gpt-4.1-mini
+   OPENAI_CHAT_TEMPERATURE=0.2
+   OPENAI_CHAT_MAX_TOKENS=600
+   OPENAI_TIMEOUT_SEC=60
+   OPENAI_EMBED_MODEL=text-embedding-3-large
+   OPENAI_EMBED_DIMENSION=3072
+
+   QDRANT_URL=http://localhost:6333
+   REDIS_URL=redis://localhost:6379/0
+
+   NOTES_DIR=../notes
+   ALLOWED_EXTS=.pdf,.docx,.xlsx,.csv,.md,.txt,.log
+   EOF
+   ```
+
+   - `OPENAI_API_KEY` is mandatory for embeddings + chat generation.
+   - `QDRANT_URL` / `REDIS_URL` default to the local Docker compose endpoints.
+   - `NOTES_DIR` must exist (create `notes/` at the repo root) and holds uploaded files.
+
+2. **Start the local data plane**
+
    ```bash
    ./scripts/start-data-plane.sh
    # or: pwsh scripts/start-data-plane.ps1
    ```
+
+   This launches Qdrant + Redis and exposes health checks on `http://localhost:6333/healthz` and `redis://localhost:6379`.
+
+3. **Install backend dependencies**
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate        # Windows: .venv\Scripts\activate
+   pip install -r backend/requirements.txt
+   ```
+
+4. **Run the FastAPI server**
+
+   ```bash
+   uvicorn backend.app.main:app --reload --port 8000
+   ```
+
+   On startup the app will connect to Redis/Qdrant, ensure the collection exists, and initialize the ingestion/RAG pipeline.
+
+5. **Load documents**
+
+   - Drop files into `notes/` and call `POST /refresh` to ingest everything in the directory, **or**
+   - Call `POST /upload` with multipart files; they are saved into `NOTES_DIR` and ingested automatically.
+
+6. **Ask questions**
+
+   Use `POST /ask` or `POST /ask_stream` after ingestion completes:
+
+   ```bash
+   curl -X POST http://localhost:8000/ask \
+     -H 'Content-Type: application/json' \
+     -d '{"query":"Where is the PTO policy?","mode":"answer"}'
+   ```
+
+## Local Development
+
+1. **Start infra** (Qdrant + Redis) – see Environment Setup step 2.
 2. **Backend**
    ```bash
-   python -m venv venv
-   ./venv/Scripts/pip install -r backend/requirements.txt
-   ./venv/Scripts/python -m uvicorn backend.app.main:app --reload --port 8000
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r backend/requirements.txt
+   uvicorn backend.app.main:app --reload --port 8000
    ```
 3. **Frontend (React)**
    ```bash
@@ -326,6 +393,7 @@ redis-cli -p 6379 ping
 5. **Smoke test**
    - `GET http://localhost:8000/health`
    - Upload: `POST /upload`
+   - Refresh: `POST /refresh`
    - Ask: `POST /ask {"query": "How do I reset voicemail?", "mode": "answer"}`
 
 ---
