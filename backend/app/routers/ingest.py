@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, Depends, UploadFile
@@ -8,13 +7,10 @@ from ..core.settings import Settings, get_settings
 from ..dependencies import get_rag_pipeline
 from ..models.ingest import RefreshRequest, RefreshResponse, UploadResponse
 from ..rag.pipeline import RagPipeline
+from ..utils.files import allowed_extensions, resolve_notes_directory
 
 router = APIRouter(tags=['ingest'])
 logger = get_logger(__name__)
-
-
-def _allowed_extensions(settings: Settings) -> set[str]:
-    return {ext.strip().lower() for ext in settings.allowed_exts.split(',') if ext.strip()}
 
 
 @router.post('/refresh', response_model=RefreshResponse)
@@ -41,9 +37,8 @@ async def upload(
         logger.info('⚠️ upload_request empty_files')
         return UploadResponse(accepted_files=0, rejected_files=0, detail='No files were uploaded.')
 
-    notes_path = Path(settings.notes_dir).resolve()
-    notes_path.mkdir(parents=True, exist_ok=True)
-    allowed_exts = _allowed_extensions(settings)
+    notes_path = resolve_notes_directory(settings, create_if_missing=True)
+    allowed_exts = allowed_extensions(settings)
     saved_paths: List[Path] = []
     rejected_files = 0
 

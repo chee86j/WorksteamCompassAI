@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from .core.logging_config import configure_logging, get_logger
 from .core.settings import get_settings
 from .rag import RagCache, RagPipeline
-from .routers import ask, files, health, ingest
+from .routers import ask, files, health, ingest, source
 
 configure_logging()
 logger = get_logger(__name__)
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
     application.include_router(ask.router)
     application.include_router(files.router)
     application.include_router(ingest.router)
+    application.include_router(source.router)
     logger.info('✅ 🧱 app_factory done.')
     return application
 

@@ -20,6 +20,7 @@ from ..ingest.loaders import load_document
 from ..rag.cache import RagCache
 from ..rag.compressor import compress_chunks
 from ..rag.prompts import SYSTEM_PROMPT
+from ..utils.files import allowed_extensions
 from ..utils.hashing import hash_file, hash_text
 from ..utils.normalize import normalize_text
 
@@ -33,7 +34,7 @@ class RagPipeline:
         logger.info('🧠 rag_pipeline_init starting...')
         self.settings = settings
         self.cache = cache
-        self.allowed_exts = {ext.strip().lower() for ext in settings.allowed_exts.split(',') if ext.strip()}
+        self.allowed_exts = allowed_extensions(settings)
         self.qdrant_client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
         self.embeddings = OpenAIEmbeddings(
             model=settings.openai_embed_model,
