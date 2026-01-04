@@ -152,6 +152,8 @@ class RagPipeline:
                 raw_text=raw_text,
                 chunk_size=self.settings.chunk_size,
                 chunk_overlap=self.settings.chunk_overlap,
+                source_extension=file_path.suffix.lower(),
+                chunk_strategy=self.settings.chunk_strategy,
             )
             if not chunk_records:
                 skipped_files += 1
@@ -178,11 +180,10 @@ class RagPipeline:
 
     async def generate_answer(self, query: str, mode: str = 'answer', filters: Dict[str, Any] | None = None) -> Dict[str, Any]:
         logger.info('💡 generate_answer starting...')
-        normalized_query = normalize_text(query or '')
-        if not normalized_query:
+        rewritten_query = await self.rewrite_query(query)
+        if not rewritten_query:
             logger.info('⚠️ generate_answer short_circuit empty query')
             return self._empty_answer('Query is empty. Please provide a question.', mode)
-        rewritten_query = await self._rewrite_query(normalized_query)
         retrieved_chunks = await self._retrieve_chunks(rewritten_query, filters)
         if not retrieved_chunks:
             return self._empty_answer('No relevant context found. Try refreshing documents.', mode)
@@ -198,6 +199,24 @@ class RagPipeline:
         logger.info('✅ 💡 generate_answer done.')
         return answer_payload
 
+    async def rewrite_query(self, query: str) -> str:
+        normalized_query = normalize_text(query or '')
+        if not normalized_query:
+            return ''
+        return await self._rewrite_query(normalized_query)
+
+    async def retrieve_chunks(
+        self,
+        query: str,
+        filters: Dict[str, Any] | None = None,
+        top_k: int | None = None,
+        use_cache: bool = True,
+    ) -> List[Dict[str, Any]]:
+        rewritten_query = await self.rewrite_query(query)
+        if not rewritten_query:
+            return []
+        return await self._retrieve_chunks(rewritten_query, filters, top_k=top_k, use_cache=use_cache)
+
     async def _rewrite_query(self, normalized_query: str) -> str:
         logger.info('✍️ rewrite_query starting...')
         cached = await self.cache.get_rewrite(normalized_query)
@@ -209,17 +228,31 @@ class RagPipeline:
         logger.info('✅ ✍️ rewrite_query done.')
         return rewrite
 
-    async def _retrieve_chunks(self, query: str, filters: Dict[str, Any] | None) -> List[Dict[str, Any]]:
+    async def _retrieve_chunks(
+        self,
+        query: str,
+        filters: Dict[str, Any] | None,
+        top_k: int | None = None,
+        use_cache: bool = True,
+    ) -> List[Dict[str, Any]]:
         logger.info('🔎 retrieve_chunks starting...')
-        cached = await self.cache.get_retrieval(query)
-        if cached:
-            logger.info('✅ 🔎 retrieve_chunks done (cache hit).')
-            return cached
+        resolved_top_k = top_k or self.settings.rag_top_k
+        cache_allowed = use_cache and not filters
+        if cache_allowed:
+            cached = await self.cache.get_retrieval(query, resolved_top_k)
+            if cached:
+                logger.info('✅ 🔎 retrieve_chunks done (cache hit).')
+                return cached
+        filter_condition = self._build_filter(filters) if filters else None
         if filters:
-            logger.debug('🎚️ retrieve_chunks filters_unhandled=%s', filters)
+            logger.debug('🎚️ retrieve_chunks filters_applied=%s', filters)
 
         def _search() -> List[Any]:
-            return self.vector_store.similarity_search_with_score(query, k=self.settings.rag_top_k)
+            return self.vector_store.similarity_search_with_score(
+                query,
+                k=resolved_top_k,
+                filter=filter_condition,
+            )
 
         docs = await asyncio.to_thread(_search)
         formatted: List[Dict[str, Any]] = []
@@ -232,9 +265,29 @@ class RagPipeline:
                     'score': score,
                 }
             )
-        await self.cache.set_retrieval(query, formatted)
+        if cache_allowed:
+            await self.cache.set_retrieval(query, resolved_top_k, formatted)
         logger.info('✅ 🔎 retrieve_chunks done.')
         return formatted
+
+    def _build_filter(self, filters: Dict[str, Any]) -> qmodels.Filter | None:
+        must_conditions: List[qmodels.FieldCondition] = []
+        for key, value in filters.items():
+            if value is None:
+                continue
+            if isinstance(value, list):
+                if not value:
+                    continue
+                must_conditions.append(
+                    qmodels.FieldCondition(key=key, match=qmodels.MatchAny(any=value))
+                )
+            else:
+                must_conditions.append(
+                    qmodels.FieldCondition(key=key, match=qmodels.MatchValue(value=value))
+                )
+        if not must_conditions:
+            return None
+        return qmodels.Filter(must=must_conditions)
 
     async def _compress_chunks(self, query: str, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         logger.info('🪫 compress_chunks starting...')

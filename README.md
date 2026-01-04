@@ -13,6 +13,11 @@ LangChain + OpenAI + Qdrant + Redis blueprint for departmental or personal work 
 - Aggressive cost controls: local rewrites, context compression, and Redis-backed caching.
 - Operator-focused UX: onboarding hints, file discovery, traceable downloads.
 
+## RAG Learning Path
+
+If you want to use this app as a hands-on RAG course (chunking, retrieval, reranking, eval loops),
+start with the guided labs in `docs/rag-learning-path.md`.
+
 ### Stack at a Glance
 
 | Subsystem                  | Responsibility                                | Stack                        |
@@ -182,6 +187,7 @@ workspace-assistant/
       package.json
   infra/
     docker-compose.yml         # Qdrant + Redis
+  docs/                        # RAG learning path + eval sets
   scripts/
     dev.ps1
     stop.ps1
@@ -222,6 +228,7 @@ ALLOWED_EXTS=.pdf,.docx,.xlsx,.csv,.md,.txt,.log
 [Chunking]
 CHUNK_SIZE=700
 CHUNK_OVERLAP=80
+CHUNK_STRATEGY=recursive   # recursive | markdown | auto
 
 [RAG Controls]
 TOP_K=10
@@ -433,6 +440,7 @@ redis-cli -p 6379 ping
 - **Unit tests**: chunking determinism, cache key + TTL correctness, loader extraction quality.
 - **Integration tests**: Qdrant upsert/retrieval, Redis cache hit/miss, `/upload → /ask → /source` happy path.
 - **Golden set**: canonical queries must surface known sources; verbatim requests must return exact steps.
+- **Eval harness**: run `python scripts/eval_rag.py --data docs/rag-eval-golden-set.sample.json` to track Recall@k and MRR.
 
   ```json
   [

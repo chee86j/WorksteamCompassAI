@@ -24,8 +24,8 @@ def _rewrite_key(query: str) -> str:
     return f'rewrite:{_hash_inputs([query])}'
 
 
-def _retrieve_key(query: str) -> str:
-    return f'retrieve:{_hash_inputs([query])}'
+def _retrieve_key(query: str, top_k: int) -> str:
+    return f'retrieve:{_hash_inputs([query, str(top_k)])}'
 
 
 def _compress_key(query: str, chunk_ids: Iterable[str]) -> str:
@@ -60,11 +60,16 @@ class RagCache:
     async def set_rewrite(self, query: str, value: Any) -> None:
         await cache_set(self.redis, _rewrite_key(query), value, self.settings.cache_rewrite_ttl_sec)
 
-    async def get_retrieval(self, query: str) -> Any | None:
-        return await cache_get(self.redis, _retrieve_key(query))
+    async def get_retrieval(self, query: str, top_k: int) -> Any | None:
+        return await cache_get(self.redis, _retrieve_key(query, top_k))
 
-    async def set_retrieval(self, query: str, value: Any) -> None:
-        await cache_set(self.redis, _retrieve_key(query), value, self.settings.cache_retrieval_ttl_sec)
+    async def set_retrieval(self, query: str, top_k: int, value: Any) -> None:
+        await cache_set(
+            self.redis,
+            _retrieve_key(query, top_k),
+            value,
+            self.settings.cache_retrieval_ttl_sec,
+        )
 
     async def get_compress(self, query: str, chunk_ids: Iterable[str]) -> Any | None:
         return await cache_get(self.redis, _compress_key(query, chunk_ids))

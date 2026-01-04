@@ -1,0 +1,12 @@
+[
+  {
+    "query": "How do I reset my voicemail PIN?",
+    "expected_sources": ["telecom-voicemail-policy.pdf"],
+    "filters": {}
+  },
+  {
+    "query": "Where is the PTO policy?",
+    "expected_sources": ["hr-pto-policy.pdf"],
+    "filters": {}
+  }
+]

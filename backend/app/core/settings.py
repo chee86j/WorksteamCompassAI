@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     chunk_size: int = Field(default=700)
     chunk_overlap: int = Field(default=80)
+    chunk_strategy: str = Field(default='recursive')
 
     rag_top_k: int = Field(default=10)
     max_context_tokens: int = Field(default=2500)
